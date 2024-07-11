@@ -42,6 +42,21 @@ jobs:
         helm upgrade --install rick-and-morty-api ./helm --create-namespace --namespace rick-and-morty
         kubectl wait --for=condition=available --timeout=300s deployment/rick-and-morty-api-deployment -n rick-and-morty
 
+    - name: Debug deployment
+      run: |
+        echo "Checking pods:"
+        kubectl get pods -n rick-and-morty
+        echo "Checking services:"
+        kubectl get services -n rick-and-morty
+        echo "Checking ingress:"
+        kubectl get ingress -n rick-and-morty
+        echo "Checking ingress controller:"
+        kubectl get pods -n ingress-nginx
+        echo "Checking logs of the API pod:"
+        kubectl logs -n rick-and-morty -l app=rick-and-morty-api
+        echo "Describing the ingress:"
+        kubectl describe ingress -n rick-and-morty
+
     - name: Run tests
       run: |
         # Test the healthcheck endpoint
@@ -61,3 +76,8 @@ jobs:
           echo "Characters endpoint failed to return data"
           exit 1
         fi
+    - name: Debug failure
+      if: failure()
+      run: |
+        kubectl -n frick-and-morty get all
+        kubectl -n rick-and-morty logs deploy/rick-and-morty-api-deployment
