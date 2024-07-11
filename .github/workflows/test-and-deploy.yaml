@@ -42,6 +42,79 @@ jobs:
         helm upgrade --install rick-and-morty-api ./helm --create-namespace --namespace rick-and-morty
         kubectl wait --for=condition=available --timeout=300s deployment/rick-and-morty-api-deployment -n rick-and-morty
 
+    - name: Wait for Ingress to be ready
+      run: |
+        echo "Waiting for Ingress to be ready..."
+        kubectl wait --namespace rick-and-morty --for=condition=ready ingress --all --timeout=90s
+        echo "Waiting for Ingress IP..."
+        attempts=0
+        while [ -z "$INGRESS_IP" ]; do
+        INGRESS_IP=$(kubectl get ingress -n rick-and-morty -o jsonpath='{.items[0].status.loadBalancer.ingress[0].ip}')
+        if [ -z "$INGRESS_IP" ]; then
+            sleep 5
+            attempts=$((attempts+1))
+            if [ $attempts -ge 3 ]; then
+            echo "Not able to get Ingress IP."
+            break
+            fi
+        fi
+        done
+        if [ -n "$INGRESS_IP" ]; then
+            echo "Ingress is ready with IP: $INGRESS_IP"
+        else
+            echo "Ingress IP not found after 3 attempts."
+        fi
+  
+    - name: Run tests
+      run: |
+        # Test the healthcheck endpoint
+        HEALTHCHECK_RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost/api/healthcheck)
+        if [ "$HEALTHCHECK_RESPONSE" = "200" ]; then
+            echo "Healthcheck passed"
+        else
+            echo "Healthcheck failed with status code: $HEALTHCHECK_RESPONSE"
+        exit 1
+        fi
+
+        # Test the characters endpoint
+        CHARACTERS_RESPONSE=$(curl -s http://localhost/api/characters)
+        if [ -n "$CHARACTERS_RESPONSE" ]; then
+            echo "Characters endpoint returned data"
+            
+            # Parse the JSON response
+            CHAR_COUNT=$(echo $CHARACTERS_RESPONSE | jq '. | length')
+            echo "Number of characters returned: $CHAR_COUNT"
+            
+            # Check if the response contains the expected fields
+            FIRST_CHAR=$(echo $CHARACTERS_RESPONSE | jq '.[0]')
+            if echo "$FIRST_CHAR" | jq -e '.name and .location and .image' > /dev/null; then
+                echo "Response contains expected fields (name, location, image)"
+            else
+                echo "Error: Response is missing expected fields"
+                echo "Response structure:"
+                echo "$FIRST_CHAR" | jq '.'
+                exit 1
+            fi
+            
+            # Validate data types
+            NAME_TYPE=$(echo $FIRST_CHAR | jq -r 'typeof .name')
+            LOCATION_TYPE=$(echo $FIRST_CHAR | jq -r 'typeof .location')
+            IMAGE_TYPE=$(echo $FIRST_CHAR | jq -r 'typeof .image')
+            
+            if [ "$NAME_TYPE" = "string" ] && [ "$LOCATION_TYPE" = "string" ] && [ "$IMAGE_TYPE" = "string" ]; then
+                echo "Data types are correct"
+            else
+                echo "Error: Incorrect data types"
+                echo "Name type: $NAME_TYPE"
+                echo "Location type: $LOCATION_TYPE"
+                echo "Image type: $IMAGE_TYPE"
+                exit 1
+            fi
+        else
+            echo "Characters endpoint failed to return data"
+            exit 1
+        fi
+
     - name: Debug deployment
       run: |
         echo "Checking pods:"
@@ -58,30 +131,3 @@ jobs:
         kubectl logs -n rick-and-morty -l app=rick-and-morty-api
         echo "Describing the ingress:"
         kubectl describe ingress -n rick-and-morty
-
-    - name: Run tests
-      run: |
-        echo "Waiting for ingress to be ready..."
-        sleep 30
-        # Test the healthcheck endpoint
-        HEALTHCHECK_RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1/api/healthcheck)
-        if [ "$HEALTHCHECK_RESPONSE" = "200" ]; then
-          echo "Healthcheck passed"
-        else
-          echo "Healthcheck failed with status code: $HEALTHCHECK_RESPONSE"
-          exit 1
-        fi
-
-        # Test the characters endpoint
-        CHARACTERS_RESPONSE=$(curl -s http://127.0.0.1/api/characters)
-        if [ -n "$CHARACTERS_RESPONSE" ]; then
-          echo "Characters endpoint returned data"
-        else
-          echo "Characters endpoint failed to return data"
-          exit 1
-        fi
-    - name: Debug failure
-      if: failure()
-      run: |
-        kubectl -n frick-and-morty get all
-        kubectl -n rick-and-morty logs deploy/rick-and-morty-api-deployment
