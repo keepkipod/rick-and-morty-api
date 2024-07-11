@@ -53,7 +53,7 @@ jobs:
         echo "Checking ingress controller:"
         kubectl get pods -n ingress-nginx
         echo "Checking for IP address:"
-        kubectl get ingress rick-and-morty-api-ingress -n rick-and-morty -o jsonpath='{.status}'
+        kubectl get service rick-and-morty-api-service -n rick-and-morty -o jsonpath='{.spec.clusterIP}'
         echo "Checking logs of the API pod:"
         kubectl logs -n rick-and-morty -l app=rick-and-morty-api
         echo "Describing the ingress:"
@@ -61,6 +61,8 @@ jobs:
 
     - name: Run tests
       run: |
+        echo "Waiting for ingress to be ready..."
+        sleep 30
         # Test the healthcheck endpoint
         HEALTHCHECK_RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1/api/healthcheck)
         if [ "$HEALTHCHECK_RESPONSE" = "200" ]; then
