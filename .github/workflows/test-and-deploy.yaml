@@ -44,15 +44,8 @@ jobs:
 
     - name: Run tests
       run: |
-        # Wait for the Ingress to be ready
-        echo "Waiting for Ingress to be ready..."
-        kubectl wait --namespace ingress-nginx \
-          --for=condition=ready pod \
-          --selector=app.kubernetes.io/component=controller \
-          --timeout=90s
-
         # Test the healthcheck endpoint
-        HEALTHCHECK_RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost/api/healthcheck)
+        HEALTHCHECK_RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1/api/healthcheck)
         if [ "$HEALTHCHECK_RESPONSE" = "200" ]; then
           echo "Healthcheck passed"
         else
@@ -61,7 +54,7 @@ jobs:
         fi
 
         # Test the characters endpoint
-        CHARACTERS_RESPONSE=$(curl -s http://localhost/api/characters)
+        CHARACTERS_RESPONSE=$(curl -s http://127.0.0.1/api/characters)
         if [ -n "$CHARACTERS_RESPONSE" ]; then
           echo "Characters endpoint returned data"
         else
