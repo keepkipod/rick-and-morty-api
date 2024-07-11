@@ -52,8 +52,10 @@ jobs:
         kubectl get ingress -n rick-and-morty
         echo "Checking ingress controller:"
         kubectl get pods -n ingress-nginx
+        echo "Checking for IP address:"
+        kubectl get ingress rick-and-morty-api-ingress -n rick-and-morty -o jsonpath='{.status.loadBalancer}'
         echo "Checking logs of the API pod:"
-        kubectl logs -n rick-and-morty -l app=rick-and-morty-api
+        kubectl logs -n rick-and-morty -l app=rick-and-morty
         echo "Describing the ingress:"
         kubectl describe ingress -n rick-and-morty
 
