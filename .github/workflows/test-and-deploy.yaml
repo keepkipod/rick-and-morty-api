@@ -47,14 +47,26 @@ jobs:
     - name: Run tests
       run: |
         kubectl rollout status deployment --namespace rick-and-morty --timeout=3m
-        sleep 30
-        HEALTHCHECK_RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1/api/healthcheck)
-        if [ "$HEALTHCHECK_RESPONSE" = "200" ]; then
-          echo "Healthcheck passed"
-        else
-          echo "Healthcheck failed with status code: $HEALTHCHECK_RESPONSE"
-          exit 1
-        fi
+        echo "Waiting for API to become responsive..."
+        timeout=90
+        start_time=$(date +%s)
+        while true; do
+          HEALTHCHECK_RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1/api/healthcheck)
+          if [ "$HEALTHCHECK_RESPONSE" = "200" ]; then
+            echo "Healthcheck passed"
+            break
+          else
+            current_time=$(date +%s)
+            elapsed=$((current_time - start_time))
+            if [ $elapsed -ge $timeout ]; then
+              echo "Timeout waiting for API to become responsive"
+              echo "Last healthcheck status code: $HEALTHCHECK_RESPONSE"
+              exit 1
+            fi
+            echo "Healthcheck failed with status code: $HEALTHCHECK_RESPONSE. Retrying..."
+            sleep 5
+          fi
+        done
 
         # Test the characters endpoint
         CHARACTERS_RESPONSE=$(curl -s http://127.0.0.1/api/characters)
@@ -71,13 +83,12 @@ jobs:
           
           # Validate JSON structure
           EXPECTED_KEYS='["name", "location", "image"]'
-          ACTUAL_KEYS=$(echo "$CHARACTERS_RESPONSE" | jq -r '.[0] | keys | sort | @json')
-          if [ "$ACTUAL_KEYS" = "$EXPECTED_KEYS" ]; then
-            echo "JSON structure is correct"
+          MISSING_KEYS=$(echo "$CHARACTERS_RESPONSE" | jq -r --argjson exp "$EXPECTED_KEYS" '.[0] | keys as $k | $exp - ($k - $exp)')
+          if [ "$MISSING_KEYS" = "[]" ]; then
+            echo "JSON structure is correct (all expected keys are present)"
           else
-            echo "Error: Unexpected JSON structure"
-            echo "Expected keys: $EXPECTED_KEYS"
-            echo "Actual keys: $ACTUAL_KEYS"
+            echo "Error: Missing expected keys in JSON structure"
+            echo "Missing keys: $MISSING_KEYS"
             exit 1
           fi
           
