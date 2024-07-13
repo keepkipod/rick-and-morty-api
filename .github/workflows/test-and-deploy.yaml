@@ -82,13 +82,14 @@ jobs:
           fi
           
           # Validate JSON structure
-          EXPECTED_KEYS='["name", "location", "image"]'
-          MISSING_KEYS=$(echo "$CHARACTERS_RESPONSE" | jq -r --argjson exp "$EXPECTED_KEYS" '.[0] | keys as $k | $exp - ($k - $exp)')
-          if [ "$MISSING_KEYS" = "[]" ]; then
-            echo "JSON structure is correct (all expected keys are present)"
+          EXPECTED_KEYS=$(echo '["name", "location", "image"]' | jq 'sort')
+          ACTUAL_KEYS=$(echo "$CHARACTERS_RESPONSE" | jq -r '.[0] | keys | sort')
+          if [ "$ACTUAL_KEYS" = "$EXPECTED_KEYS" ]; then
+            echo "JSON structure is correct"
           else
-            echo "Error: Missing expected keys in JSON structure"
-            echo "Missing keys: $MISSING_KEYS"
+            echo "Error: Unexpected JSON structure"
+            echo "Expected keys: $EXPECTED_KEYS"
+            echo "Actual keys: $ACTUAL_KEYS"
             exit 1
           fi
           
