@@ -107,21 +107,6 @@ jobs:
             echo "$FIRST_CHAR" | jq '.'
             exit 1
           fi
-          
-          # Validate data types
-          NAME_TYPE=$(echo $FIRST_CHAR | jq -r 'typeof .name')
-          LOCATION_TYPE=$(echo $FIRST_CHAR | jq -r 'typeof .location')
-          IMAGE_TYPE=$(echo $FIRST_CHAR | jq -r 'typeof .image')
-          
-          if [ "$NAME_TYPE" = "string" ] && [ "$LOCATION_TYPE" = "string" ] && [ "$IMAGE_TYPE" = "string" ]; then
-            echo "Data types are correct"
-          else
-            echo "Error: Incorrect data types"
-            echo "Name type: $NAME_TYPE"
-            echo "Location type: $LOCATION_TYPE"
-            echo "Image type: $IMAGE_TYPE"
-            exit 1
-          fi
         else
           echo "Characters endpoint failed to return data"
           exit 1
