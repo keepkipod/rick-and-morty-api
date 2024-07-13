@@ -35,21 +35,18 @@ jobs:
     - name: Install Ingress NGINX
       run: |
         kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
-        kubectl rollout status deployment --timeout=3m
+        kubectl rollout status deployment --namespace ingress-nginx --timeout=3m
         kubectl wait --namespace ingress-nginx --for=condition=ready pod --selector=app.kubernetes.io/component=controller --timeout=90s
 
     - name: Deploy to Kind
       run: |
         helm upgrade --install rick-and-morty-api ./helm --create-namespace --namespace rick-and-morty
         kubectl wait --for=condition=available --timeout=300s deployment/rick-and-morty-api-deployment -n rick-and-morty
-        kubectl rollout status deployment --timeout=3m
+        kubectl rollout status deployment --namespace rick-and-morty --timeout=3m
 
     - name: Run tests
       run: |
-        # echo "Waiting for ingress to be ready..."
-        # sleep 30
-        kubectl rollout status deployment --timeout=5m
-        # Test the healthcheck endpoint
+        kubectl rollout status deployment --namespace rick-and-morty --timeout=3m
         HEALTHCHECK_RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1/api/healthcheck)
         if [ "$HEALTHCHECK_RESPONSE" = "200" ]; then
           echo "Healthcheck passed"
@@ -57,17 +54,68 @@ jobs:
           echo "Healthcheck failed with status code: $HEALTHCHECK_RESPONSE"
           exit 1
         fi
-        curl http://127.0.0.1/api/characters
+
         # Test the characters endpoint
         CHARACTERS_RESPONSE=$(curl -s http://127.0.0.1/api/characters)
         if [ -n "$CHARACTERS_RESPONSE" ]; then
           echo "Characters endpoint returned data"
+          
+          # Validate JSON integrity
+          if echo "$CHARACTERS_RESPONSE" | jq empty; then
+            echo "JSON is valid and well-formed"
+          else
+            echo "Error: Invalid JSON returned"
+            exit 1
+          fi
+          
+          # Validate JSON structure
+          EXPECTED_KEYS='["name", "location", "image"]'
+          ACTUAL_KEYS=$(echo "$CHARACTERS_RESPONSE" | jq -r '.[0] | keys | sort | @json')
+          if [ "$ACTUAL_KEYS" = "$EXPECTED_KEYS" ]; then
+            echo "JSON structure is correct"
+          else
+            echo "Error: Unexpected JSON structure"
+            echo "Expected keys: $EXPECTED_KEYS"
+            echo "Actual keys: $ACTUAL_KEYS"
+            exit 1
+          fi
+          
+          # Parse the JSON response
+          CHAR_COUNT=$(echo $CHARACTERS_RESPONSE | jq '. | length')
+          echo "Number of characters returned: $CHAR_COUNT"
+          
+          # Check if the response contains the expected fields
+          FIRST_CHAR=$(echo $CHARACTERS_RESPONSE | jq '.[0]')
+          if echo "$FIRST_CHAR" | jq -e '.name and .location and .image' > /dev/null; then
+            echo "Response contains expected fields (name, location, image)"
+          else
+            echo "Error: Response is missing expected fields"
+            echo "Response structure:"
+            echo "$FIRST_CHAR" | jq '.'
+            exit 1
+          fi
+          
+          # Validate data types
+          NAME_TYPE=$(echo $FIRST_CHAR | jq -r 'typeof .name')
+          LOCATION_TYPE=$(echo $FIRST_CHAR | jq -r 'typeof .location')
+          IMAGE_TYPE=$(echo $FIRST_CHAR | jq -r 'typeof .image')
+          
+          if [ "$NAME_TYPE" = "string" ] && [ "$LOCATION_TYPE" = "string" ] && [ "$IMAGE_TYPE" = "string" ]; then
+            echo "Data types are correct"
+          else
+            echo "Error: Incorrect data types"
+            echo "Name type: $NAME_TYPE"
+            echo "Location type: $LOCATION_TYPE"
+            echo "Image type: $IMAGE_TYPE"
+            exit 1
+          fi
         else
           echo "Characters endpoint failed to return data"
           exit 1
         fi
 
     - name: Debug deployment
+      if: failure()
       run: |
         echo "Checking pods:"
         kubectl get pods -n rick-and-morty
