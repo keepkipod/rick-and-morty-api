@@ -35,17 +35,20 @@ jobs:
     - name: Install Ingress NGINX
       run: |
         kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
+        kubectl rollout status deployment --timeout=3m
         kubectl wait --namespace ingress-nginx --for=condition=ready pod --selector=app.kubernetes.io/component=controller --timeout=90s
 
     - name: Deploy to Kind
       run: |
         helm upgrade --install rick-and-morty-api ./helm --create-namespace --namespace rick-and-morty
         kubectl wait --for=condition=available --timeout=300s deployment/rick-and-morty-api-deployment -n rick-and-morty
+        kubectl rollout status deployment --timeout=3m
 
     - name: Run tests
       run: |
-        echo "Waiting for ingress to be ready..."
-        sleep 30
+        # echo "Waiting for ingress to be ready..."
+        # sleep 30
+        kubectl rollout status deployment --timeout=5m
         # Test the healthcheck endpoint
         HEALTHCHECK_RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1/api/healthcheck)
         if [ "$HEALTHCHECK_RESPONSE" = "200" ]; then
