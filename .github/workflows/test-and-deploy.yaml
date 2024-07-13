@@ -47,6 +47,7 @@ jobs:
     - name: Run tests
       run: |
         kubectl rollout status deployment --namespace rick-and-morty --timeout=3m
+        sleep 30
         HEALTHCHECK_RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1/api/healthcheck)
         if [ "$HEALTHCHECK_RESPONSE" = "200" ]; then
           echo "Healthcheck passed"
